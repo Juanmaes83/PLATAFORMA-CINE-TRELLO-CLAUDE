@@ -97,6 +97,20 @@ export interface Attachment {
   uploaded_at: string;
 }
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface Checklist {
+  id: string;
+  card_id: string;
+  title: string;
+  items: ChecklistItem[];
+  position: number;
+}
+
 export interface Card {
   id: string;
   list_id: string;

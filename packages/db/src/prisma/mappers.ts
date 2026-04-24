@@ -10,6 +10,8 @@ import type {
   Card,
   CardPriority,
   ApprovalStatus,
+  Checklist,
+  ChecklistItem,
   List,
   User,
   WorkflowType
@@ -120,6 +122,39 @@ export function rowToUser(row: UserRow): User {
     email: row.email,
     avatar_color: row.avatar_color,
     role: row.role
+  };
+}
+
+type ChecklistRow = {
+  id: string;
+  card_id: string;
+  title: string;
+  items: unknown;
+  position: number;
+};
+
+function coerceItems(raw: unknown): ChecklistItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (it): it is { id: unknown; text: unknown; done: unknown } =>
+        typeof it === 'object' && it !== null
+    )
+    .map((it) => ({
+      id: String(it.id ?? ''),
+      text: String(it.text ?? ''),
+      done: Boolean(it.done)
+    }))
+    .filter((it) => it.id.length > 0);
+}
+
+export function rowToChecklist(row: ChecklistRow): Checklist {
+  return {
+    id: row.id,
+    card_id: row.card_id,
+    title: row.title,
+    items: coerceItems(row.items),
+    position: row.position
   };
 }
 

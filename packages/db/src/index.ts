@@ -11,7 +11,7 @@
  * process.env.DATA_LAYER.
  */
 
-import type { Board, Card, List, User } from '@artemis/types';
+import type { Board, Card, Checklist, List, User } from '@artemis/types';
 
 /* ============================ Interfaces ============================ */
 
@@ -47,11 +47,19 @@ export interface IUserRepository {
   current(): Promise<User>;
 }
 
+export interface IChecklistRepository {
+  listByBoard(boardId: string): Promise<Checklist[]>;
+  create(checklist: Omit<Checklist, 'id'> & { id?: string }): Promise<Checklist>;
+  update(id: string, patch: Partial<Checklist>): Promise<Checklist>;
+  remove(id: string): Promise<void>;
+}
+
 export interface RepositoryBundle {
   cards: ICardRepository;
   lists: IListRepository;
   boards: IBoardRepository;
   users: IUserRepository;
+  checklists: IChecklistRepository;
 }
 
 /* ============================ Bundles ============================ */
@@ -59,3 +67,4 @@ export interface RepositoryBundle {
 export { memoryRepos } from './memory';
 export { prismaRepos } from './prisma';
 export { prisma } from './prisma/client';
+export { cardProgress, type ProgressResult } from './progress';

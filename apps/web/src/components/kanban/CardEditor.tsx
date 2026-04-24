@@ -3,10 +3,13 @@
 import {
   AlignLeft,
   Calendar,
+  CheckSquare,
   CircleDollarSign,
   Copy,
   Film,
+  GitBranch,
   Move,
+  Plus,
   Tag,
   Trash2,
   Users,
@@ -25,10 +28,19 @@ export function CardEditor() {
   const cards = useBoard((s) => s.cards);
   const lists = useBoard((s) => s.lists);
   const users = useBoard((s) => s.users);
+  const checklists = useBoard((s) => s.checklists);
   const updateCard = useBoard((s) => s.updateCard);
   const deleteCard = useBoard((s) => s.deleteCard);
   const duplicateCard = useBoard((s) => s.duplicateCard);
   const moveCard = useBoard((s) => s.moveCard);
+  const moveCardWithDescendants = useBoard((s) => s.moveCardWithDescendants);
+  const addSubcard = useBoard((s) => s.addSubcard);
+  const reorderChildren = useBoard((s) => s.reorderChildren);
+  const addChecklist = useBoard((s) => s.addChecklist);
+  const deleteChecklist = useBoard((s) => s.deleteChecklist);
+  const addChecklistItem = useBoard((s) => s.addChecklistItem);
+  const toggleChecklistItem = useBoard((s) => s.toggleChecklistItem);
+  const removeChecklistItem = useBoard((s) => s.removeChecklistItem);
 
   const card = selectedCardId
     ? cards.find((c) => c.id === selectedCardId)
@@ -47,6 +59,12 @@ export function CardEditor() {
   const [quantityDraft, setQuantityDraft] = useState('');
 
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [newChecklistTitle, setNewChecklistTitle] = useState('');
+  const [pendingMove, setPendingMove] = useState<{ listId: string } | null>(
+    null
+  );
+  const [draggedChildId, setDraggedChildId] = useState<string | null>(null);
 
   useEffect(() => {
     if (card) {
@@ -86,6 +104,26 @@ export function CardEditor() {
   const list = useMemo(
     () => (card ? lists.find((l) => l.id === card.list_id) : null),
     [card, lists]
+  );
+
+  const cardChildren = useMemo(
+    () =>
+      card
+        ? cards
+            .filter((c) => c.parent_card_id === card.id)
+            .sort((a, b) => a.position - b.position)
+        : [],
+    [card, cards]
+  );
+
+  const cardChecklists = useMemo(
+    () =>
+      card
+        ? checklists
+            .filter((cl) => cl.card_id === card.id)
+            .sort((a, b) => a.position - b.position)
+        : [],
+    [card, checklists]
   );
 
   if (!card) return null;
@@ -381,6 +419,212 @@ export function CardEditor() {
             </div>
           </section>
 
+          {/* Subtareas (tarjetas nodales) — Sprint 3 */}
+          <section>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-400 mb-2">
+              <GitBranch className="h-3.5 w-3.5" />
+              Subtareas
+              {cardChildren.length > 0 && (
+                <span className="ml-1 rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold text-violet-300">
+                  {cardChildren.filter((c) => {
+                    const wf = lists.find((l) => l.id === c.list_id)?.workflow_type;
+                    return wf === 'done' || wf === 'approved';
+                  }).length}
+                  /{cardChildren.length}
+                </span>
+              )}
+            </div>
+            {cardChildren.length > 0 && (
+              <ul className="space-y-1 mb-2">
+                {cardChildren.map((ch, idx) => {
+                  const wf = lists.find((l) => l.id === ch.list_id)?.workflow_type;
+                  const isDone = wf === 'done' || wf === 'approved';
+                  return (
+                    <li
+                      key={ch.id}
+                      draggable
+                      onDragStart={() => setDraggedChildId(ch.id)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (!draggedChildId || draggedChildId === ch.id) return;
+                        const ids = cardChildren.map((c) => c.id);
+                        const from = ids.indexOf(draggedChildId);
+                        const to = idx;
+                        if (from === -1) return;
+                        ids.splice(from, 1);
+                        ids.splice(to, 0, draggedChildId);
+                        reorderChildren(card.id, ids);
+                        setDraggedChildId(null);
+                      }}
+                      className="flex items-center gap-2 rounded bg-ink-800/60 px-2 py-1.5 text-xs hover:bg-ink-800 cursor-grab active:cursor-grabbing"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isDone}
+                        onChange={(e) => {
+                          // Mover la hija al final de la lista "done" o volver a la lista del padre.
+                          const targetList = e.target.checked
+                            ? lists.find((l) => l.workflow_type === 'done')
+                            : lists.find((l) => l.id === card.list_id);
+                          if (!targetList) return;
+                          const destCount = cards.filter(
+                            (c) => c.list_id === targetList.id
+                          ).length;
+                          moveCard(ch.id, targetList.id, destCount);
+                        }}
+                        className="h-3.5 w-3.5 rounded border-ink-600 bg-ink-700 text-amber-arte focus:ring-amber-arte"
+                      />
+                      <button
+                        onClick={() => setSelected(ch.id)}
+                        className="flex-1 truncate text-left text-ink-100 hover:text-amber-arte"
+                      >
+                        {ch.title}
+                      </button>
+                      <span
+                        className={
+                          'inline-block h-1.5 w-1.5 rounded-full ' +
+                          (ch.approval_status === 'rejected'
+                            ? 'bg-red-500'
+                            : isDone
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-500')
+                        }
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newSubtaskTitle.trim()) {
+                    addSubcard(card.id, newSubtaskTitle.trim());
+                    setNewSubtaskTitle('');
+                  }
+                }}
+                placeholder={
+                  cardChildren.length === 0
+                    ? 'Convertir en tarjeta nodal añadiendo una subtarea…'
+                    : 'Añadir subtarea…'
+                }
+                className={inputCls + ' flex-1'}
+              />
+              <button
+                onClick={() => {
+                  if (!newSubtaskTitle.trim()) return;
+                  addSubcard(card.id, newSubtaskTitle.trim());
+                  setNewSubtaskTitle('');
+                }}
+                className="inline-flex items-center gap-1 rounded bg-ink-700 px-2 py-1 text-xs font-semibold text-ink-100 hover:bg-ink-600"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Añadir
+              </button>
+            </div>
+          </section>
+
+          {/* Checklists (tarjetas simples) — Sprint 3 */}
+          <section>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-400 mb-2">
+              <CheckSquare className="h-3.5 w-3.5" />
+              Checklist
+            </div>
+            {cardChecklists.length === 0 && cardChildren.length === 0 && (
+              <div className="text-[10px] text-ink-400 italic mb-2">
+                Usa checklist para tareas simples, o subtareas para tarjetas nodales.
+              </div>
+            )}
+            {cardChecklists.map((cl) => {
+              const doneCount = cl.items.filter((it) => it.done).length;
+              return (
+                <div
+                  key={cl.id}
+                  className="mb-3 rounded-lg bg-ink-800/60 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-xs font-semibold text-ink-100">
+                      {cl.title}
+                      <span className="ml-2 text-[10px] text-ink-400 tabular-nums">
+                        {doneCount}/{cl.items.length}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (confirm(`¿Eliminar el checklist "${cl.title}"?`)) {
+                          deleteChecklist(cl.id);
+                        }
+                      }}
+                      className="text-ink-400 hover:text-red-400"
+                      aria-label="Eliminar checklist"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <ul className="space-y-1">
+                    {cl.items.map((it) => (
+                      <li key={it.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={it.done}
+                          onChange={() => toggleChecklistItem(cl.id, it.id)}
+                          className="h-3.5 w-3.5 rounded border-ink-600 bg-ink-700 text-amber-arte focus:ring-amber-arte"
+                        />
+                        <span
+                          className={
+                            'flex-1 text-xs ' +
+                            (it.done
+                              ? 'line-through text-ink-400'
+                              : 'text-ink-100')
+                          }
+                        >
+                          {it.text}
+                        </span>
+                        <button
+                          onClick={() => removeChecklistItem(cl.id, it.id)}
+                          className="text-ink-500 hover:text-red-400"
+                          aria-label="Quitar item"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <AddItemRow
+                    onAdd={(text) => addChecklistItem(cl.id, text)}
+                  />
+                </div>
+              );
+            })}
+            <div className="flex gap-2">
+              <input
+                value={newChecklistTitle}
+                onChange={(e) => setNewChecklistTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newChecklistTitle.trim()) {
+                    addChecklist(card.id, newChecklistTitle.trim());
+                    setNewChecklistTitle('');
+                  }
+                }}
+                placeholder="Nuevo checklist…"
+                className={inputCls + ' flex-1'}
+              />
+              <button
+                onClick={() => {
+                  if (!newChecklistTitle.trim()) return;
+                  addChecklist(card.id, newChecklistTitle.trim());
+                  setNewChecklistTitle('');
+                }}
+                className="inline-flex items-center gap-1 rounded bg-ink-700 px-2 py-1 text-xs font-semibold text-ink-100 hover:bg-ink-600"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nuevo
+              </button>
+            </div>
+          </section>
+
           {/* Descripción editable */}
           <section>
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-400 mb-2">
@@ -515,15 +759,20 @@ export function CardEditor() {
                       .filter((l) => l.id !== card.list_id)
                       .sort((a, b) => a.position - b.position)
                       .map((l) => {
-                        const destCount = cards.filter(
-                          (c) => c.list_id === l.id
-                        ).length;
                         return (
                           <button
                             key={l.id}
                             onClick={() => {
-                              moveCard(card.id, l.id, destCount);
                               setShowMoveMenu(false);
+                              if (cardChildren.length > 0) {
+                                // Pide confirmación (modal) antes de mover
+                                setPendingMove({ listId: l.id });
+                              } else {
+                                const destCount = cards.filter(
+                                  (c) => c.list_id === l.id
+                                ).length;
+                                moveCard(card.id, l.id, destCount);
+                              }
                             }}
                             className="block w-full px-3 py-2 text-left text-xs text-ink-100 hover:bg-ink-700 first:rounded-t-md last:rounded-b-md"
                           >
@@ -544,6 +793,61 @@ export function CardEditor() {
           </section>
         </div>
       </aside>
+
+      {/* Modal: mover tarjeta nodal con/sin subtareas */}
+      {pendingMove && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-xl border border-ink-700 bg-ink-900 p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-ink-50 mb-2">
+              Tarjeta nodal
+            </h3>
+            <p className="text-sm text-ink-300 mb-5">
+              &quot;{card.title}&quot; tiene{' '}
+              <span className="font-semibold text-ink-100">
+                {cardChildren.length} subtarea{cardChildren.length !== 1 && 's'}
+              </span>
+              . ¿Mover solo esta tarjeta o también sus subtareas?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  const destCount = cards.filter(
+                    (c) => c.list_id === pendingMove.listId
+                  ).length;
+                  moveCard(card.id, pendingMove.listId, destCount);
+                  setPendingMove(null);
+                }}
+                className="w-full rounded-md bg-ink-700 px-4 py-2 text-sm font-semibold text-ink-100 hover:bg-ink-600"
+              >
+                Solo esta tarjeta
+              </button>
+              <button
+                onClick={() => {
+                  const destCount = cards.filter(
+                    (c) => c.list_id === pendingMove.listId
+                  ).length;
+                  moveCardWithDescendants(
+                    card.id,
+                    pendingMove.listId,
+                    destCount
+                  );
+                  setPendingMove(null);
+                }}
+                className="w-full rounded-md bg-amber-arte px-4 py-2 text-sm font-semibold text-ink-950 hover:bg-amber-arte/90"
+              >
+                Esta y sus {cardChildren.length} subtarea
+                {cardChildren.length !== 1 && 's'}
+              </button>
+              <button
+                onClick={() => setPendingMove(null)}
+                className="w-full rounded-md px-4 py-2 text-xs text-ink-400 hover:text-ink-100"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -567,6 +871,35 @@ function Field({
         {label}
       </div>
       {children}
+    </div>
+  );
+}
+
+function AddItemRow({ onAdd }: { onAdd: (text: string) => void }) {
+  const [text, setText] = useState('');
+  const commit = () => {
+    const v = text.trim();
+    if (!v) return;
+    onAdd(v);
+    setText('');
+  };
+  return (
+    <div className="mt-2 flex gap-2">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+        }}
+        placeholder="Añadir item…"
+        className={inputCls + ' flex-1 text-xs'}
+      />
+      <button
+        onClick={commit}
+        className="inline-flex items-center rounded bg-ink-700 px-2 py-1 text-[10px] font-semibold text-ink-100 hover:bg-ink-600"
+      >
+        +
+      </button>
     </div>
   );
 }

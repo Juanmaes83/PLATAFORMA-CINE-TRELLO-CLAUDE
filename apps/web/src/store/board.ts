@@ -1,16 +1,19 @@
 'use client';
 
-import type { Board, Card, List, User } from '@artemis/types';
+import type { Board, Card, Checklist, ChecklistItem, List, User } from '@artemis/types';
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import {
   actionCreateCard,
+  actionCreateChecklist,
   actionCreateList,
   actionDeleteCard,
+  actionDeleteChecklist,
   actionDeleteList,
   actionMoveCard,
   actionResetSeed,
   actionUpdateCard,
+  actionUpdateChecklist,
   actionUpdateList,
   loadBoardState
 } from '../app/actions/board';
@@ -44,6 +47,7 @@ interface BoardState {
   lists: List[];
   cards: Card[];
   users: User[];
+  checklists: Checklist[];
   selectedCardId: string | null;
   hydrated: boolean;
   toasts: ToastMessage[];
@@ -57,14 +61,35 @@ interface BoardState {
 
   // Optimistic ops (firmas idénticas a Sprint 1)
   moveCard: (cardId: string, toListId: string, toPosition: number) => void;
+  /**
+   * Sprint 3: mover tarjeta nodal arrastrando a sus descendientes.
+   * Cuando `cascade` es true, TODAS las hijas/nietas se mueven a la misma lista
+   * (conservando orden relativo). Llamar desde el modal de confirmación.
+   */
+  moveCardWithDescendants: (
+    cardId: string,
+    toListId: string,
+    toPosition: number
+  ) => void;
   addCard: (listId: string, title: string) => string | null;
+  /** Sprint 3: crea una hija de parentId en la misma lista del padre. */
+  addSubcard: (parentId: string, title: string) => string | null;
   updateCard: (cardId: string, patch: Partial<Card>) => void;
   duplicateCard: (cardId: string) => string | null;
   deleteCard: (cardId: string) => void;
+  reorderChildren: (parentId: string, orderedIds: string[]) => void;
 
   addList: (title: string) => void;
   renameList: (listId: string, title: string) => void;
   deleteList: (listId: string) => void;
+
+  // Checklists (Sprint 3)
+  addChecklist: (cardId: string, title: string) => string | null;
+  renameChecklist: (checklistId: string, title: string) => void;
+  deleteChecklist: (checklistId: string) => void;
+  addChecklistItem: (checklistId: string, text: string) => void;
+  toggleChecklistItem: (checklistId: string, itemId: string) => void;
+  removeChecklistItem: (checklistId: string, itemId: string) => void;
 
   resetSeed: () => void;
 }
@@ -83,6 +108,7 @@ export const useBoard = create<BoardState>()((set, get) => ({
   lists: [],
   cards: [],
   users: [],
+  checklists: [],
   selectedCardId: null,
   hydrated: false,
   toasts: [],
@@ -95,6 +121,7 @@ export const useBoard = create<BoardState>()((set, get) => ({
         lists: state.lists,
         cards: state.cards,
         users: state.users,
+        checklists: state.checklists ?? [],
         hydrated: true
       });
     } catch (err) {
@@ -314,6 +341,209 @@ export const useBoard = create<BoardState>()((set, get) => ({
       console.error('[artemis] deleteList failed', err);
       set({ lists: snapshotLists, cards: snapshotCards });
       toast('No se pudo eliminar la lista.');
+    });
+  },
+
+  /* ------------------------------ Subcards (Sprint 3) ------------------------------ */
+
+  addSubcard: (parentId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return null;
+    const { cards, users, board } = get();
+    const parent = cards.find((c) => c.id === parentId);
+    if (!parent) return null;
+
+    const siblings = cards.filter((c) => c.parent_card_id === parentId);
+    const lastPos = siblings.reduce((m, c) => Math.max(m, c.position), -1);
+
+    const id = `c_${nanoid(8)}`;
+    const now = new Date().toISOString();
+    const newCard: Card = {
+      id,
+      list_id: parent.list_id,
+      board_id: board.id,
+      parent_card_id: parentId,
+      position: lastPos + 1,
+      title: trimmed,
+      assignee_ids: [],
+      priority: 'medium',
+      labels: [],
+      approval_status: 'draft',
+      created_at: now,
+      updated_at: now,
+      created_by: users[0]?.id ?? 'u_ana'
+    };
+    set({ cards: [...cards, newCard] });
+
+    const { created_at: _ca, updated_at: _ua, ...createInput } = newCard;
+    actionCreateCard(createInput).catch((err) => {
+      console.error('[artemis] addSubcard failed', err);
+      set({ cards });
+      toast('No se pudo crear la subtarea.');
+    });
+    return id;
+  },
+
+  reorderChildren: (parentId, orderedIds) => {
+    const snapshot = get().cards;
+    const updated = snapshot.map((c) => {
+      if (c.parent_card_id !== parentId) return c;
+      const idx = orderedIds.indexOf(c.id);
+      return idx === -1 ? c : { ...c, position: idx };
+    });
+    set({ cards: updated });
+    // Persistimos cada hija modificada (transacción no crítica: si una falla
+    // el UI ya hizo su revert con snapshot).
+    Promise.all(
+      orderedIds.map((id, position) =>
+        actionUpdateCard(id, { position }).catch((err) => {
+          console.error('[artemis] reorderChildren failed', err);
+          set({ cards: snapshot });
+          toast('No se pudo reordenar las subtareas.');
+          throw err;
+        })
+      )
+    ).catch(() => {
+      /* ya notificado */
+    });
+  },
+
+  moveCardWithDescendants: (cardId, toListId, toPosition) => {
+    const { cards } = get();
+    // BFS para descendientes.
+    const descendants: string[] = [];
+    const queue = [cardId];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const kids = cards.filter((c) => c.parent_card_id === current).map((c) => c.id);
+      descendants.push(...kids);
+      queue.push(...kids);
+    }
+    // Mover la tarjeta raíz con la lógica normal.
+    get().moveCard(cardId, toListId, toPosition);
+    // Luego mover cada descendiente a la misma lista (al final, preservando
+    // su orden relativo).
+    const snapshot = get().cards;
+    const basePos = snapshot.filter((c) => c.list_id === toListId).length;
+    descendants.forEach((id, i) => {
+      const pos = basePos + i;
+      set((s) => ({
+        cards: s.cards.map((c) =>
+          c.id === id ? { ...c, list_id: toListId, position: pos } : c
+        )
+      }));
+      actionMoveCard(id, toListId, pos).catch((err) => {
+        console.error('[artemis] cascade move failed', err);
+        toast('No se pudo mover alguna subtarea.');
+      });
+    });
+  },
+
+  /* ------------------------------ Checklists ------------------------------ */
+
+  addChecklist: (cardId, title) => {
+    const { checklists } = get();
+    const id = `ck_${nanoid(8)}`;
+    const position = checklists.filter((cl) => cl.card_id === cardId).length;
+    const cl: Checklist = {
+      id,
+      card_id: cardId,
+      title: title.trim() || 'Checklist',
+      position,
+      items: []
+    };
+    set({ checklists: [...checklists, cl] });
+    actionCreateChecklist(cl).catch((err) => {
+      console.error('[artemis] addChecklist failed', err);
+      set({ checklists });
+      toast('No se pudo crear el checklist.');
+    });
+    return id;
+  },
+
+  renameChecklist: (checklistId, title) => {
+    const snapshot = get().checklists;
+    const newTitle = title.trim();
+    if (!newTitle) return;
+    set({
+      checklists: snapshot.map((cl) =>
+        cl.id === checklistId ? { ...cl, title: newTitle } : cl
+      )
+    });
+    actionUpdateChecklist(checklistId, { title: newTitle }).catch((err) => {
+      console.error('[artemis] renameChecklist failed', err);
+      set({ checklists: snapshot });
+      toast('No se pudo renombrar el checklist.');
+    });
+  },
+
+  deleteChecklist: (checklistId) => {
+    const snapshot = get().checklists;
+    set({ checklists: snapshot.filter((cl) => cl.id !== checklistId) });
+    actionDeleteChecklist(checklistId).catch((err) => {
+      console.error('[artemis] deleteChecklist failed', err);
+      set({ checklists: snapshot });
+      toast('No se pudo eliminar el checklist.');
+    });
+  },
+
+  addChecklistItem: (checklistId, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const snapshot = get().checklists;
+    const cl = snapshot.find((c) => c.id === checklistId);
+    if (!cl) return;
+    const newItem: ChecklistItem = {
+      id: `i_${nanoid(6)}`,
+      text: trimmed,
+      done: false
+    };
+    const updatedItems = [...cl.items, newItem];
+    set({
+      checklists: snapshot.map((c) =>
+        c.id === checklistId ? { ...c, items: updatedItems } : c
+      )
+    });
+    actionUpdateChecklist(checklistId, { items: updatedItems }).catch((err) => {
+      console.error('[artemis] addChecklistItem failed', err);
+      set({ checklists: snapshot });
+      toast('No se pudo añadir el item.');
+    });
+  },
+
+  toggleChecklistItem: (checklistId, itemId) => {
+    const snapshot = get().checklists;
+    const cl = snapshot.find((c) => c.id === checklistId);
+    if (!cl) return;
+    const updatedItems = cl.items.map((it) =>
+      it.id === itemId ? { ...it, done: !it.done } : it
+    );
+    set({
+      checklists: snapshot.map((c) =>
+        c.id === checklistId ? { ...c, items: updatedItems } : c
+      )
+    });
+    actionUpdateChecklist(checklistId, { items: updatedItems }).catch((err) => {
+      console.error('[artemis] toggleChecklistItem failed', err);
+      set({ checklists: snapshot });
+      toast('No se pudo guardar el item.');
+    });
+  },
+
+  removeChecklistItem: (checklistId, itemId) => {
+    const snapshot = get().checklists;
+    const cl = snapshot.find((c) => c.id === checklistId);
+    if (!cl) return;
+    const updatedItems = cl.items.filter((it) => it.id !== itemId);
+    set({
+      checklists: snapshot.map((c) =>
+        c.id === checklistId ? { ...c, items: updatedItems } : c
+      )
+    });
+    actionUpdateChecklist(checklistId, { items: updatedItems }).catch((err) => {
+      console.error('[artemis] removeChecklistItem failed', err);
+      set({ checklists: snapshot });
+      toast('No se pudo borrar el item.');
     });
   },
 

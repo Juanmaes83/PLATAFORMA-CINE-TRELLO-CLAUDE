@@ -266,6 +266,65 @@ const cards: SeedCard[] = [
     actual_cost: 60,
     approval_status: 'approved',
     created_by: 'u_marc'
+  },
+  // Hijas del reloj (c_001): demo de tarjeta nodal con 3 subtareas.
+  {
+    id: 'c_001a',
+    list_id: 'l_returned',
+    board_id: 'b_props_01',
+    parent_card_id: 'c_001',
+    position: 0,
+    title: 'Grabado manual inscripción tapa',
+    scene_numbers: ['12A'],
+    assignee_ids: ['u_lucia'],
+    priority: 'high',
+    labels: ['Hero'],
+    approval_status: 'approved',
+    created_by: 'u_ana'
+  },
+  {
+    id: 'c_001b',
+    list_id: 'l_search',
+    board_id: 'b_props_01',
+    parent_card_id: 'c_001',
+    position: 2,
+    title: 'Proveedor de cadena de acero envejecida',
+    scene_numbers: ['47'],
+    assignee_ids: ['u_marc'],
+    priority: 'medium',
+    labels: [],
+    approval_status: 'pending',
+    created_by: 'u_ana'
+  },
+  {
+    id: 'c_001c',
+    list_id: 'l_need',
+    board_id: 'b_props_01',
+    parent_card_id: 'c_001',
+    position: 2,
+    title: 'Doblaje: réplica para plano detalle',
+    scene_numbers: ['47'],
+    assignee_ids: ['u_ana'],
+    priority: 'medium',
+    labels: ['Hero'],
+    approval_status: 'draft',
+    created_by: 'u_ana'
+  }
+];
+
+// Checklist demo en c_002 (prop simple con 4 pasos).
+const checklists = [
+  {
+    id: 'ck_c002_1',
+    card_id: 'c_002',
+    title: 'Flujo de producción',
+    position: 0,
+    items: [
+      { id: 'i_1', text: 'Redactar titular y cuerpo del artículo', done: true },
+      { id: 'i_2', text: 'Maquetar en InDesign estilo época', done: true },
+      { id: 'i_3', text: 'Imprimir 12 copias en papel envejecido', done: false },
+      { id: 'i_4', text: 'Envejecer manualmente con té', done: false }
+    ]
   }
 ];
 
@@ -273,11 +332,15 @@ async function main() {
   console.log('🎬 ARTEMIS · seed start');
 
   // Orden respeta foreign keys: Project → User → Board → List → Card
+  await prisma.checklist.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.attachment.deleteMany();
+  // Hijas primero (self-FK onDelete SetNull pero mejor explícito).
+  await prisma.card.deleteMany({ where: { parent_card_id: { not: null } } });
   await prisma.card.deleteMany();
   await prisma.list.deleteMany();
   await prisma.board.deleteMany();
+  await prisma.userFunction.deleteMany();
   await prisma.user.deleteMany();
   await prisma.project.deleteMany();
 
@@ -293,10 +356,29 @@ async function main() {
   await prisma.list.createMany({ data: lists });
   console.log(`  ✓ ${lists.length} lists`);
 
+  // Insertamos padres primero (c_00X sin parent), luego hijas (c_001a/b/c).
+  const parents = cards.filter((c) => !c.parent_card_id);
+  const children = cards.filter((c) => c.parent_card_id);
   await prisma.card.createMany({
-    data: cards as Prisma.CardCreateManyInput[]
+    data: parents as Prisma.CardCreateManyInput[]
   });
-  console.log(`  ✓ ${cards.length} cards`);
+  if (children.length > 0) {
+    await prisma.card.createMany({
+      data: children as Prisma.CardCreateManyInput[]
+    });
+  }
+  console.log(`  ✓ ${cards.length} cards (${children.length} subtareas)`);
+
+  await prisma.checklist.createMany({
+    data: checklists.map((cl) => ({
+      id: cl.id,
+      card_id: cl.card_id,
+      title: cl.title,
+      position: cl.position,
+      items: cl.items as unknown as Prisma.InputJsonValue
+    }))
+  });
+  console.log(`  ✓ ${checklists.length} checklist(s)`);
 
   console.log('✅ seed done');
 }

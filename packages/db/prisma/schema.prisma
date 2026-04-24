@@ -144,6 +144,7 @@ model Card {
   children    Card[]       @relation("CardHierarchy")
   comments    Comment[]
   attachments Attachment[]
+  checklists  Checklist[]
 
   @@index([list_id, position])
   @@index([board_id])
@@ -170,6 +171,19 @@ model Attachment {
   uploaded_at DateTime @default(now())
 
   card Card @relation(fields: [card_id], references: [id], onDelete: Cascade)
+}
+
+// Checklists adjuntos a una tarjeta. `items` es JSONB con [{id, text, done}].
+model Checklist {
+  id        String   @id
+  card_id   String
+  title     String
+  items     Json     @default("[]")
+  position  Int
+
+  card Card @relation(fields: [card_id], references: [id], onDelete: Cascade)
+
+  @@index([card_id, position])
 }
 
 // Multi-proyecto: un usuario puede pertenecer a N proyectos con roles distintos.

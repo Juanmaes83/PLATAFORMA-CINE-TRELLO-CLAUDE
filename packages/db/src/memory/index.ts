@@ -2,11 +2,12 @@
  * Implementación in-memory de los repositorios (demo / tests).
  */
 
-import type { Board, Card, List, User } from '@artemis/types';
+import type { Board, Card, Checklist, List, User } from '@artemis/types';
 import { nanoid } from 'nanoid';
 import type {
   IBoardRepository,
   ICardRepository,
+  IChecklistRepository,
   IListRepository,
   IUserRepository,
   RepositoryBundle
@@ -17,6 +18,7 @@ let _cards: Card[] = [...seedCards];
 let _lists: List[] = [...seedLists];
 let _board: Board = { ...seedBoard };
 let _users: User[] = [...seedUsers];
+let _checklists: Checklist[] = [];
 
 const memoryCardRepo: ICardRepository = {
   async list(boardId) {
@@ -109,9 +111,39 @@ const memoryUserRepo: IUserRepository = {
   }
 };
 
+const memoryChecklistRepo: IChecklistRepository = {
+  async listByBoard(boardId) {
+    const cardIds = new Set(
+      _cards.filter((c) => c.board_id === boardId).map((c) => c.id)
+    );
+    return _checklists
+      .filter((cl) => cardIds.has(cl.card_id))
+      .sort((a, b) => a.position - b.position);
+  },
+  async create(input) {
+    const cl: Checklist = {
+      ...input,
+      id: input.id ?? `ck_${nanoid(8)}`,
+      items: input.items ?? []
+    };
+    _checklists.push(cl);
+    return cl;
+  },
+  async update(id, patch) {
+    const idx = _checklists.findIndex((cl) => cl.id === id);
+    if (idx === -1) throw new Error(`Checklist ${id} not found`);
+    _checklists[idx] = { ..._checklists[idx], ...patch };
+    return _checklists[idx];
+  },
+  async remove(id) {
+    _checklists = _checklists.filter((cl) => cl.id !== id);
+  }
+};
+
 export const memoryRepos: RepositoryBundle = {
   cards: memoryCardRepo,
   lists: memoryListRepo,
   boards: memoryBoardRepo,
-  users: memoryUserRepo
+  users: memoryUserRepo,
+  checklists: memoryChecklistRepo
 };

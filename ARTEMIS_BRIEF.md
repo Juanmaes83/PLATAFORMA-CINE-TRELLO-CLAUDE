@@ -121,7 +121,10 @@ usuario). Ambos respetan RBAC y cuotas por rol.
 - Sprint 2 ✅ COMPLETADO: Postgres + Prisma + server actions, schema con
   UserFunction y Card.parent_card_id, toasts stackables 3s, type-check y
   lint limpios.
-- Sprint 3 🔄 PENDIENTE: Tarjetas nodales + barras de progreso.
+- Sprint 3 ✅ COMPLETADO: Tarjetas nodales (parent/children + mover con
+  descendientes) + barras de progreso (simple/nodal/bloqueada) + checklists
+  CRUD + reorden drag de subtareas. Modelo Checklist en Prisma/memory,
+  función pura cardProgress(), componente ProgressBar.
 - Sprint 4 🔄 PENDIENTE: Filtros multidimensionales.
 - Sprint 5 🔄 PENDIENTE: Capa de abstracción IA (packages/ai).
 

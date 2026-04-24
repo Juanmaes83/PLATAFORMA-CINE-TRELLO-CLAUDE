@@ -27,11 +27,13 @@ export async function resetAndSeed(): Promise<void> {
   const { prisma } = await import('@artemis/db');
 
   await prisma.$transaction([
+    prisma.checklist.deleteMany(),
     prisma.comment.deleteMany(),
     prisma.attachment.deleteMany(),
     prisma.card.deleteMany(),
     prisma.list.deleteMany(),
     prisma.board.deleteMany(),
+    prisma.userFunction.deleteMany(),
     prisma.user.deleteMany(),
     prisma.project.deleteMany()
   ]);

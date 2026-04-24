@@ -5,15 +5,17 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Card as TCard } from '@artemis/types';
 import {
   Calendar,
+  ChevronRight,
   CircleDollarSign,
   Film,
-  MessageSquare,
-  Paperclip
+  MessageSquare
 } from 'lucide-react';
+import { useState } from 'react';
 import { useBoard } from '../../store/board';
 import { cn, formatDate, formatEUR, priorityColor } from '../../lib/utils';
 import { Avatar } from '../ui/Avatar';
 import { Label } from '../ui/Label';
+import { ProgressBar } from './ProgressBar';
 
 interface Props {
   card: TCard;
@@ -21,7 +23,9 @@ interface Props {
 
 export function CardItem({ card }: Props) {
   const users = useBoard((s) => s.users);
+  const cards = useBoard((s) => s.cards);
   const setSelected = useBoard((s) => s.setSelectedCard);
+  const [expanded, setExpanded] = useState(false);
 
   const {
     attributes,
@@ -42,6 +46,8 @@ export function CardItem({ card }: Props) {
 
   const assignees = users.filter((u) => card.assignee_ids.includes(u.id));
   const isHero = card.art_metadata?.subdept === 'props' && card.art_metadata.data.is_hero;
+  const children = cards.filter((c) => c.parent_card_id === card.id);
+  const hasChildren = children.length > 0;
 
   return (
     <div
@@ -72,10 +78,32 @@ export function CardItem({ card }: Props) {
         </div>
       )}
 
-      {/* título */}
-      <h4 className="text-[13px] font-medium leading-snug text-ink-50">
-        {card.title}
-      </h4>
+      {/* título + icono expandir si hay hijas */}
+      <div className="flex items-start gap-1.5">
+        {hasChildren && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+            }}
+            className="flex-shrink-0 mt-0.5 rounded hover:bg-ink-600 p-0.5 text-ink-300"
+            aria-label={expanded ? 'Colapsar subtareas' : 'Expandir subtareas'}
+          >
+            <ChevronRight
+              className={cn(
+                'h-3.5 w-3.5 transition-transform',
+                expanded && 'rotate-90'
+              )}
+            />
+          </button>
+        )}
+        <h4 className="flex-1 text-[13px] font-medium leading-snug text-ink-50">
+          {card.title}
+        </h4>
+      </div>
+
+      {/* Progress bar bajo el título (spec Sprint 3) */}
+      <ProgressBar card={card} className="mt-1.5" />
 
       {/* metadatos cinematográficos */}
       {(card.scene_numbers?.length || card.script_reference) && (
@@ -111,6 +139,13 @@ export function CardItem({ card }: Props) {
             </span>
           )}
 
+          {/* nodal badge */}
+          {hasChildren && (
+            <span className="rounded bg-violet-500/20 px-1 py-0.5 font-bold text-violet-300">
+              {children.length} sub
+            </span>
+          )}
+
           {/* fecha */}
           {card.due_date && (
             <span className="inline-flex items-center gap-1">
@@ -140,6 +175,35 @@ export function CardItem({ card }: Props) {
           </div>
         )}
       </div>
+
+      {/* Lista inline de subtareas (expandido) */}
+      {hasChildren && expanded && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 border-t border-ink-600 pt-2 space-y-1"
+        >
+          {children
+            .sort((a, b) => a.position - b.position)
+            .map((ch) => (
+              <button
+                key={ch.id}
+                onClick={() => setSelected(ch.id)}
+                className="w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[11px] text-ink-100 hover:bg-ink-600/60"
+              >
+                <span
+                  className={cn(
+                    'inline-block h-1.5 w-1.5 rounded-full flex-shrink-0',
+                    priorityColor[ch.priority]
+                  )}
+                />
+                <span className="flex-1 truncate">{ch.title}</span>
+                <span className="text-[9px] uppercase text-ink-400 flex-shrink-0">
+                  {ch.approval_status === 'rejected' && '⛔'}
+                </span>
+              </button>
+            ))}
+        </div>
+      )}
     </div>
   );
 }

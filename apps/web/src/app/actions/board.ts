@@ -9,7 +9,7 @@
  * lanzamos y el store revierte + muestra toast.
  */
 
-import type { Card, List } from '@artemis/types';
+import type { Card, Checklist, List } from '@artemis/types';
 import { getRepos } from '../../lib/repositories';
 
 /* ============================ Lectura ============================ */
@@ -23,12 +23,13 @@ export async function loadBoardState() {
       'No hay ningún board en la base. Ejecuta `pnpm prisma db seed` en packages/db.'
     );
   }
-  const [lists, cards, users] = await Promise.all([
+  const [lists, cards, users, checklists] = await Promise.all([
     repos.lists.list(board.id),
     repos.cards.list(board.id),
-    repos.users.list()
+    repos.users.list(),
+    repos.checklists.listByBoard(board.id)
   ]);
-  return { board, lists, cards, users };
+  return { board, lists, cards, users, checklists };
 }
 
 /* ============================ Cards ============================ */
@@ -82,6 +83,25 @@ export async function actionUpdateList(
 
 export async function actionDeleteList(id: string): Promise<void> {
   await getRepos().lists.remove(id);
+}
+
+/* ============================ Checklists ============================ */
+
+export async function actionCreateChecklist(
+  input: Omit<Checklist, 'id'> & { id?: string }
+): Promise<Checklist> {
+  return getRepos().checklists.create(input);
+}
+
+export async function actionUpdateChecklist(
+  id: string,
+  patch: Partial<Checklist>
+): Promise<Checklist> {
+  return getRepos().checklists.update(id, patch);
+}
+
+export async function actionDeleteChecklist(id: string): Promise<void> {
+  await getRepos().checklists.remove(id);
 }
 
 /* ============================ Reset demo ============================ */
