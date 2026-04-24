@@ -1,2 +1,25 @@
 node_modules/
 .env
+.env.local
+
+# Next.js
+.next/
+out/
+
+# Turborepo
+.turbo/
+
+# TypeScript
+*.tsbuildinfo
+
+# Prisma local env (cada máquina el suyo)
+packages/db/.env
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
