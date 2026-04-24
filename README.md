@@ -6,7 +6,7 @@
 
 ---
 
-## ⚡ Arranque rápido
+## ⚡ Arranque rápido (modo demo, sin DB)
 
 Requisitos: **Node 18.17+** y **pnpm 8**.
 
@@ -17,13 +17,55 @@ npm install -g pnpm@8.15.6
 # 2. Instalar dependencias del monorepo
 pnpm install
 
-# 3. Levantar el dev server
+# 3. (solo demo) Forzar capa en memoria
+echo 'DATA_LAYER="memory"' > .env
+
+# 4. Levantar el dev server
 pnpm dev
 ```
 
-Abre **http://localhost:3000** y verás el tablero "GOLDEN HOUR · S01 — Atrezzo / Props" con 5 columnas y 7 tarjetas semilla.
+Modo memoria: sin Postgres, los cambios viven en RAM del server y se
+pierden al reiniciar. Útil para demos rápidas. El modo real es Postgres →
+ver sección siguiente.
 
-> Si prefieres usar `npm`: `npm install --legacy-peer-deps && npm run dev` (no recomendado en monorepo, pero funciona).
+---
+
+## 🐘 Arrancar el entorno completo (Sprint 2: Postgres + Prisma)
+
+Requisitos adicionales: **Docker** (Docker Desktop en Windows/Mac) y
+**Node 18.17+ / pnpm 8**.
+
+```bash
+# 1. Levantar Postgres en contenedor
+docker compose up -d
+
+# 2. Copiar plantilla de entorno (una sola vez)
+cp .env.example .env
+
+# 3. Crear el esquema en la DB (genera migraciones + cliente Prisma)
+cd packages/db && pnpm prisma migrate dev
+cd ../..
+
+# 4. Cargar los datos seed (GOLDEN HOUR · S01 — Atrezzo)
+cd packages/db && pnpm prisma db seed
+cd ../..
+
+# 5. Levantar la app
+pnpm dev
+```
+
+Abre **http://localhost:3000**. Mueve tarjetas, cierra la pestaña,
+reabre: los cambios persisten en Postgres. Para volver al estado seed,
+usa el botón **Restaurar demo** en la Topbar (dispara un reset + reseed
+en el server).
+
+### Resetear Postgres de raíz
+
+```bash
+docker compose down -v          # borra volumen + datos
+docker compose up -d
+cd packages/db && pnpm prisma migrate dev && pnpm prisma db seed
+```
 
 ---
 

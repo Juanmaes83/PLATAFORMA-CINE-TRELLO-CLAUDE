@@ -21,6 +21,7 @@ export function ListColumn({ list, cards }: Props) {
   const addCard = useBoard((s) => s.addCard);
   const deleteList = useBoard((s) => s.deleteList);
   const renameList = useBoard((s) => s.renameList);
+  const setSelectedCard = useBoard((s) => s.setSelectedCard);
 
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -47,8 +48,10 @@ export function ListColumn({ list, cards }: Props) {
       setComposing(false);
       return;
     }
-    addCard(list.id, draft);
+    const newId = addCard(list.id, draft);
     setDraft('');
+    setComposing(false);
+    if (newId) setSelectedCard(newId);
   };
 
   return (

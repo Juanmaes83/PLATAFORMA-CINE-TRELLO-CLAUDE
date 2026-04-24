@@ -101,6 +101,7 @@ export interface Card {
   id: string;
   list_id: string;
   board_id: string;
+  parent_card_id?: string | null; // nodal: null/undefined = raíz
   position: number; // orden dentro de la lista
   title: string;
   description?: string;
@@ -152,3 +153,17 @@ export interface Project {
   code: string; // ej. "GLDN-S01"
   client?: string;
 }
+
+/**
+ * Multi-proyecto: un usuario puede pertenecer a N proyectos con roles distintos.
+ * Reservado para Sprint 5 (auth + RBAC multi-proyecto).
+ */
+export interface UserFunction {
+  id: string;
+  user_id: string;
+  project_id: string;
+  role: User['role'];
+  subdepartment?: Subdepartment;
+  created_at: string;
+}
+

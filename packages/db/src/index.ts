@@ -1,18 +1,29 @@
 /**
  * ARTEMIS · Capa de repositorios
  * --------------------------------
- * Interfaz pensada para que en Sprint 1 se sustituya la
- * implementación in-memory por Prisma/Drizzle sobre Postgres
- * SIN cambiar una línea de la UI.
+ * Interfaces neutras consumidas por apps/web vía server actions.
  *
- * Los componentes consumen ICardRepository, no la implementación.
+ * Implementaciones:
+ *   - memoryRepos  (in-memory, útil para demos sin DB / tests rápidos)
+ *   - prismaRepos  (Postgres via Prisma, producción desde Sprint 2)
+ *
+ * La selección se hace en apps/web/src/lib/repositories/index.ts según
+ * process.env.DATA_LAYER.
  */
 
 import type { Board, Card, List, User } from '@artemis/types';
 
+/* ============================ Interfaces ============================ */
+
 export interface ICardRepository {
   list(boardId: string): Promise<Card[]>;
-  create(card: Omit<Card, 'id' | 'created_at' | 'updated_at'>): Promise<Card>;
+  /**
+   * IMPORTANTE: el id lo genera el cliente (para optimistic update instantáneo).
+   * Si se omite, el repo lo rellena.
+   */
+  create(
+    card: Omit<Card, 'created_at' | 'updated_at'> & { id?: string }
+  ): Promise<Card>;
   update(id: string, patch: Partial<Card>): Promise<Card>;
   remove(id: string): Promise<void>;
   move(id: string, toListId: string, position: number): Promise<Card>;
@@ -21,7 +32,7 @@ export interface ICardRepository {
 
 export interface IListRepository {
   list(boardId: string): Promise<List[]>;
-  create(list: Omit<List, 'id'>): Promise<List>;
+  create(list: Omit<List, 'id'> & { id?: string }): Promise<List>;
   update(id: string, patch: Partial<List>): Promise<List>;
   remove(id: string): Promise<void>;
 }
@@ -42,3 +53,9 @@ export interface RepositoryBundle {
   boards: IBoardRepository;
   users: IUserRepository;
 }
+
+/* ============================ Bundles ============================ */
+
+export { memoryRepos } from './memory';
+export { prismaRepos } from './prisma';
+export { prisma } from './prisma/client';

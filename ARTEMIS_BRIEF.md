@@ -118,7 +118,12 @@ usuario). Ambos respetan RBAC y cuotas por rol.
 
 - Sprint 0 ✅ COMPLETADO: Kanban base + drag-and-drop + tablero demo.
 - Sprint 1 parcial ✅ COMPLETADO: Editor de tarjeta completo, duplicar, mover.
-- Sprint 2 🔄 PENDIENTE: Persistencia real (Postgres + Prisma).
+- Sprint 2 ✅ COMPLETADO: Postgres + Prisma + server actions, schema con
+  UserFunction y Card.parent_card_id, toasts stackables 3s, type-check y
+  lint limpios.
+- Sprint 3 🔄 PENDIENTE: Tarjetas nodales + barras de progreso.
+- Sprint 4 🔄 PENDIENTE: Filtros multidimensionales.
+- Sprint 5 🔄 PENDIENTE: Capa de abstracción IA (packages/ai).
 
 ## Convenciones de nombres
 

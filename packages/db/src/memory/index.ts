@@ -1,32 +1,33 @@
 /**
- * Implementación in-memory de los repositorios.
- * Sprint 1 sustituye este archivo por uno basado en Prisma/Drizzle
- * sin tocar UI ni store.
+ * Implementación in-memory de los repositorios (demo / tests).
  */
 
+import type { Board, Card, List, User } from '@artemis/types';
+import { nanoid } from 'nanoid';
 import type {
   IBoardRepository,
   ICardRepository,
   IListRepository,
-  IUserRepository
-} from '@artemis/db';
-import type { Board, Card, List, User } from '@artemis/types';
-import { nanoid } from 'nanoid';
-import { seedBoard, seedCards, seedLists, seedUsers } from '../seed';
+  IUserRepository,
+  RepositoryBundle
+} from '../index';
+import { seedBoard, seedCards, seedLists, seedUsers } from './seed-data';
 
 let _cards: Card[] = [...seedCards];
 let _lists: List[] = [...seedLists];
 let _board: Board = { ...seedBoard };
 let _users: User[] = [...seedUsers];
 
-export const memoryCardRepo: ICardRepository = {
+const memoryCardRepo: ICardRepository = {
   async list(boardId) {
-    return _cards.filter((c) => c.board_id === boardId);
+    return _cards
+      .filter((c) => c.board_id === boardId)
+      .sort((a, b) => a.position - b.position);
   },
   async create(input) {
     const card: Card = {
       ...input,
-      id: `c_${nanoid(8)}`,
+      id: input.id ?? `c_${nanoid(8)}`,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -67,14 +68,14 @@ export const memoryCardRepo: ICardRepository = {
   }
 };
 
-export const memoryListRepo: IListRepository = {
+const memoryListRepo: IListRepository = {
   async list(boardId) {
     return _lists
       .filter((l) => l.board_id === boardId)
       .sort((a, b) => a.position - b.position);
   },
   async create(input) {
-    const list: List = { ...input, id: `l_${nanoid(8)}` };
+    const list: List = { ...input, id: input.id ?? `l_${nanoid(8)}` };
     _lists.push(list);
     return list;
   },
@@ -90,7 +91,7 @@ export const memoryListRepo: IListRepository = {
   }
 };
 
-export const memoryBoardRepo: IBoardRepository = {
+const memoryBoardRepo: IBoardRepository = {
   async get(id) {
     return _board.id === id ? _board : null;
   },
@@ -99,16 +100,16 @@ export const memoryBoardRepo: IBoardRepository = {
   }
 };
 
-export const memoryUserRepo: IUserRepository = {
+const memoryUserRepo: IUserRepository = {
   async list() {
     return _users;
   },
   async current() {
-    return _users[0]; // mock: la directora de arte
+    return _users[0];
   }
 };
 
-export const repos = {
+export const memoryRepos: RepositoryBundle = {
   cards: memoryCardRepo,
   lists: memoryListRepo,
   boards: memoryBoardRepo,

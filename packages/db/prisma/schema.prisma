@@ -1,0 +1,190 @@
+// ARTEMIS · Schema Prisma (Sprint 2)
+// Modelo alineado con packages/types/src/index.ts.
+// Campos en snake_case para mantener 1:1 con los tipos TypeScript
+// y evitar capas de adaptación entre DB <-> @artemis/types.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ======================= Enums =======================
+
+enum Subdepartment {
+  graphics
+  props
+  set_decoration
+  construction
+  production
+}
+
+enum WorkflowType {
+  todo
+  in_progress
+  review
+  approved
+  done
+  archived
+}
+
+enum CardPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum ApprovalStatus {
+  draft
+  pending
+  approved
+  rejected
+}
+
+enum UserRole {
+  admin
+  production_manager
+  art_director
+  department_lead
+  crew
+  viewer
+}
+
+// ======================= Entidades =======================
+
+model Project {
+  id     String  @id
+  title  String
+  code   String  @unique
+  client String?
+
+  boards          Board[]
+  user_functions  UserFunction[]
+}
+
+model User {
+  id           String   @id
+  name         String
+  email        String   @unique
+  avatar_color String
+  role         UserRole
+
+  created_cards  Card[]         @relation("CardCreatedBy")
+  comments       Comment[]
+  user_functions UserFunction[]
+}
+
+model Board {
+  id             String        @id
+  title          String
+  subdepartment  Subdepartment
+  project_id     String
+  background     String
+  created_at     DateTime      @default(now())
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  lists List[]
+  cards Card[]
+}
+
+model List {
+  id            String       @id
+  board_id      String
+  title         String
+  position      Int
+  workflow_type WorkflowType
+  wip_limit     Int?
+
+  board Board  @relation(fields: [board_id], references: [id], onDelete: Cascade)
+  cards Card[]
+
+  @@index([board_id, position])
+}
+
+model Card {
+  id               String          @id
+  list_id          String
+  board_id         String
+  parent_card_id   String?
+  position         Int
+  title            String
+  description      String?
+  cover_color      String?
+
+  // Cinematográfico
+  scene_numbers    String[]
+  script_reference String?
+  art_metadata     Json?
+
+  // Asignación / fechas
+  assignee_ids     String[]
+  due_date         DateTime?
+  priority         CardPriority    @default(medium)
+  labels           String[]
+
+  // Financiero (RBAC)
+  estimated_cost   Float?
+  actual_cost      Float?
+  approval_status  ApprovalStatus?
+
+  // Auditoría
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+  created_by       String
+
+  list        List         @relation(fields: [list_id], references: [id], onDelete: Cascade)
+  board       Board        @relation(fields: [board_id], references: [id], onDelete: Cascade)
+  creator     User         @relation("CardCreatedBy", fields: [created_by], references: [id])
+  parent      Card?        @relation("CardHierarchy", fields: [parent_card_id], references: [id], onDelete: SetNull)
+  children    Card[]       @relation("CardHierarchy")
+  comments    Comment[]
+  attachments Attachment[]
+
+  @@index([list_id, position])
+  @@index([board_id])
+  @@index([parent_card_id])
+}
+
+model Comment {
+  id         String   @id
+  card_id    String
+  author_id  String
+  body       String
+  created_at DateTime @default(now())
+
+  card   Card @relation(fields: [card_id], references: [id], onDelete: Cascade)
+  author User @relation(fields: [author_id], references: [id])
+}
+
+model Attachment {
+  id          String   @id
+  card_id     String
+  filename    String
+  url         String
+  size_bytes  Int
+  uploaded_at DateTime @default(now())
+
+  card Card @relation(fields: [card_id], references: [id], onDelete: Cascade)
+}
+
+// Multi-proyecto: un usuario puede pertenecer a N proyectos con roles distintos.
+// Reservado para Sprint 5 (auth + RBAC multi-proyecto). Sprint 2 solo crea la tabla.
+model UserFunction {
+  id             String        @id
+  user_id        String
+  project_id     String
+  role           UserRole
+  subdepartment  Subdepartment?
+  created_at     DateTime      @default(now())
+
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, project_id])
+  @@index([project_id])
+}
